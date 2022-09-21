@@ -6,7 +6,7 @@ import requests, time, datetime
 
 
 
-class scrapy():
+class Scrapy():
     def __init__(self):
         self.urls = {
                 "listed": "http://isin.twse.com.tw/isin/C_public.jsp?strMode=2", # 上市
@@ -17,7 +17,7 @@ class scrapy():
 
     def get_ticker(self, url):
         '''
-        url:
+        url: (data source)
             上市: https://isin.twse.com.tw/isin/C_public.jsp?strMode=2
             上櫃: https://isin.twse.com.tw/isin/C_public.jsp?strMode=4
         '''
@@ -92,6 +92,7 @@ class scrapy():
 
     
     def get_price(self, start = "2021-01-01", end = "2021-01-31", mode = "all", query = None):
+        # data source: yahoo finance
         '''
         start:
             YYYY-MM-DD
@@ -143,12 +144,16 @@ class scrapy():
         # 資料整理及清洗
         print(f"{'-'*30} Clean data. {'-'*30}")
         price = pd.DataFrame()
-        for i in range(0, df.shape[1], 6):
+        for i in tqdm(range(0, df.shape[1], 6)):
             df1 = df.iloc[:, i:i+6]
 
-            symbol = df1.columns.get_level_values(0)[0]
-            column = df1.columns.get_level_values(1)
-            df1.columns = column
+            if df.shape[1] != 6:
+                symbol = df1.columns.get_level_values(0)[0]
+                column = df1.columns.get_level_values(1)
+                df1.columns = column
+            else:
+                symbol = query
+
             df1["Symbol"] = symbol#.replace(".TWO", "").replace(".TW", "")
 
             df1 = df1.dropna()
@@ -163,6 +168,7 @@ class scrapy():
 
 
     def get_spread_of_shareholding(self, start = "2019-01-01", end = "2024-12-31", mode = "all", query = None):
+        # data source: 神秘金字塔 - https://norway.twsthr.info/StockHolders.aspx
         '''
         start:
             YYYY-MM-DD
@@ -176,8 +182,8 @@ class scrapy():
         query:
             mode為all、listed、opt: None
             mode為other: 
-                        一檔股票的query: 上市: "2330.TW" 、 上櫃: "6510.TWO" 
-                        多檔股票的query: "2330.TW 6510.TWO"
+                        一檔股票的query: 上市: "2330" 、 上櫃: "6510" 
+                        多檔股票的query: "2330 6510"
         '''
 
 
@@ -192,12 +198,14 @@ class scrapy():
 
 
         if mode != "other":
+            print(f"{'-'*30} Get ticker. {'-'*30}")
             tickers = self.get_TW_tickers(mode)
             tickers = tickers["symbol"].tolist()
         else:
-            tickers = [query]
+            tickers = query.split(" ")
+        
 
-
+        print(f"{'-'*30} Get spread of shareholding. {'-'*30}")
         no_data = []
         spread = pd.DataFrame()
         for symbol in tqdm(tickers):
@@ -205,15 +213,22 @@ class scrapy():
             res = requests.get(f"https://norway.twsthr.info/StockHolders.aspx?stock={symbol}")
             soup = BeautifulSoup(res.text, 'lxml')
 
-            #檢查是否有資料
+            # 檢查是否有資料
+            ## 無證券代號
             no_data1 = "查詢無此證券代號資料, 請重新查詢!"
             no_data2 = soup.find("li", {"class": "disabled"}).text.replace("\n", "")
             if no_data1 == no_data2:
                 no_data.append(symbol)
                 continue
+            
+            ## 有證券代號，無表格
+            try:
+                samples = soup.find("div", {"id": "D1"}).find("table").find("table").find_all("tr")
+            except:
+                no_data.append(symbol)
+                continue
 
             # 解析提取表格數據
-            samples = soup.find("div", {"id": "D1"}).find("table").find("table").find_all("tr")
             data = []
             for i in range(len(samples)):
                 elements = samples[i].find_all("td")[2:-1]
@@ -231,9 +246,144 @@ class scrapy():
             spread = pd.concat([spread, df], ignore_index = True)
             # time.sleep(0.5)
 
-        self.spread = spread.query("(資料日期 >= @start) & (資料日期 <= @end)").reset_index(drop = True)
+        if len(spread) >= 1:
+            self.spread = spread.query("(資料日期 >= @start) & (資料日期 <= @end)").reset_index(drop = True)
         
         if no_data != []:
-            print(f"{symbol} don't have data.")
+            print(f"No data found for {no_data}.")
 
         return self.spread
+    
+
+
+    def clean_profit_analysis(self, dfs, year = 111, season = 1):
+        df = dfs[0]
+        df.columns = df.iloc[0]
+        df = df.drop(0)
+        df.insert(0, "year", year)
+        df.insert(1, "season", season)
+
+        return df
+    
+
+
+    def clean_income_statement(self, dfs, year = 111, season = 1):
+        features = ['公司代號', '公司名稱', '收入', '營業毛利', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+
+        dfs[1]["收入"] = dfs[1].eval("利息淨收益 + 利息以外淨損益")
+        dfs[1] = dfs[1][['公司代號', '公司名稱', '收入',  '繼續營業單位稅前淨利（淨損）', '本期稅後淨利（淨損）', '本期綜合損益總額（稅後）', '基本每股盈餘（元）']]
+        dfs[1].columns = ['公司代號', '公司名稱', '收入', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+
+        dfs[2] = dfs[2][['公司代號', '公司名稱', '收益', '營業利益', '稅前淨利（淨損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
+        dfs[2].columns = ['公司代號', '公司名稱', '收入', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+
+        dfs[3] = dfs[3][['公司代號', '公司名稱', '營業收入', '營業毛利（毛損）淨額', '營業利益（損失）', '稅前淨利（淨損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
+        dfs[3].columns = features
+
+        dfs[4] = dfs[4][['公司代號', '公司名稱', '淨收益', '繼續營業單位稅前損益', '本期稅後淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
+        dfs[4].columns = ['公司代號', '公司名稱', '收入', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+
+        dfs[5] = dfs[5][['公司代號', '公司名稱', '營業收入', '營業利益（損失）', '繼續營業單位稅前純益（純損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
+        dfs[5].columns = ['公司代號', '公司名稱', '收入', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+
+        dfs[6] = dfs[6][['公司代號', '公司名稱', '收入', '繼續營業單位稅前淨利（淨損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
+        dfs[6].columns = ['公司代號', '公司名稱', '收入', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+
+        df = pd.concat(dfs[1:], axis=0, sort=False)
+        df = df[features]
+
+        df.insert(0, "year", year)
+        df.insert(1, "season", season)
+        
+        return df
+    
+
+    def get_financial_statement(self, year = 111, season = 1, type_ = 1, clean = 1, start_year = None, end_year = None):
+        # data source:
+            # 損益表:     https://mops.twse.com.tw/mops/web/t163sb04
+            # 資產負債表: https://mops.twse.com.tw/mops/web/t163sb05
+            # 營益分析表: https://mops.twse.com.tw/mops/web/t163sb06
+        '''
+            year: 
+                YYY (民國)
+            season: 
+                1、2、3、4 (第幾季)
+            type_: 
+                1: 損益表
+                2: 資產負債
+                3: 營益分析表
+            clean: (type_=2 - 資產負債，目前無法清洗，待開發)
+                1: 清洗
+                0: 原始資料
+            start_year: (需與end_year一起使用)
+                YYY (民國)
+            end_year: (需與start_year一起使用)
+                YYY (民國)
+        '''
+        
+
+        state = {
+            1: "Income Statement",
+            2: "Balance Sheet",
+            3: "Profit Analysis",
+        }
+
+
+        # 指定要抓取的報表
+        if type_ == 1:
+            url = 'https://mops.twse.com.tw/mops/web/ajax_t163sb04'
+        elif type_ == 2:
+            url = 'https://mops.twse.com.tw/mops/web/ajax_t163sb05'
+        elif type_ == 3:
+            url = 'https://mops.twse.com.tw/mops/web/ajax_t163sb06'
+        else:
+            print('type does not match')
+
+
+        # 獲得要抓取的報表之期間
+        if start_year and end_year:
+            years = list(range(109, 111+1))
+            seasons = [1, 2, 3, 4]
+        else:
+            years = [year]
+            seasons = [season]
+
+
+        # 取得報表資料
+        print(f"{'-'*30} Get {state[type_]}. {'-'*30}")
+        df1 = pd.DataFrame()
+        for year in tqdm(years):
+            for season in seasons:
+                r = requests.post(url, {
+                    'encodeURIComponent':1,
+                    'step':1,
+                    'firstin':1,
+                    'off':1,
+                    'TYPEK':'sii',
+                    'year':str(year),
+                    'season':str(season),
+                })
+            
+                if "查詢無資料" in r.text:
+                    print(f"No data in year = {year}, season = {season}.")
+                    continue
+                
+                r.encoding = 'utf8'
+                dfs = pd.read_html(r.text, header=None)
+
+
+                if (type_ == 1) & (clean == 1):
+                    df0 = self.clean_income_statement(dfs, year, season)
+                elif (type_ == 3) & (clean == 1):
+                    df0 = self.clean_profit_analysis(dfs, year, season)
+
+                if ((type_ == 1) or (type_ == 3)) & clean:
+                    df1 = pd.concat([df1, df0], ignore_index = True)
+                else:
+                    df0 = pd.concat(dfs)
+                    df0.insert(0, "year", year)
+                    df0.insert(1, "season", season)
+                    df1 = pd.concat([df1, df0], ignore_index = True)
+
+
+        return df1
