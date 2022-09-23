@@ -2,7 +2,9 @@ import pandas as pd
 import yfinance as yf
 from tqdm import tqdm
 from bs4 import BeautifulSoup
-import requests, time, datetime, random
+from chinese_calendar import is_workday
+from io import StringIO
+import requests, time, datetime, random, json
 
 
 
@@ -339,6 +341,88 @@ class Scrapy():
 
         return self.statement
     
+
+
+    def get_chip_data(self, start = "2022-09-17", end = "2022-09-22", mode = "all"):
+        # 取得時間區間內的所有工作日
+        start = datetime.datetime.strptime(start, "%Y-%m-%d")
+        end = datetime.datetime.strptime(end, "%Y-%m-%d")
+
+        dates = pd.date_range(start, end)
+        work = [is_workday(date) for date in dates]
+        dates = dates[work]
+        dates_str = [datetime.datetime.strftime(date, "%Y%m%d") for date in dates]
+
+
+        # 獲取三大法人資訊
+        df1_1 = pd.DataFrame()
+        df2_1 = pd.DataFrame()
+        no_data = str()
+        features = ['Date', '證券代號', '證券名稱', '外資(不含外資自營)', '外資自營', '外資', '投信', '自營(自行買賣)', '自營(避險)', '自營', '三大法人']
+
+        print(f"{'-'*30} Get chips data. {'-'*30}")
+        for i in tqdm(range(len(dates))):
+            # 上市資料
+            if (mode == "all") or (mode == "listed"):
+                r = requests.get(f"http://www.tse.com.tw/fund/T86?response=csv&date={dates_str[i]}&selectType=ALLBUT0999")
+
+                if r.text == "\r\n":
+                    no_data += f"{dates[i]} doesn't have data.\n"
+                    continue
+
+                df1_0 = pd.read_csv(StringIO(r.text), header = 1, thousands = ",")
+                df1_0 = df1_0.dropna(how='all', axis=1).dropna(how='any') # 刪除
+                df1_0.insert(0, "Date", dates[i])
+
+                df1_1 = pd.concat([df1_1, df1_0], ignore_index = True)
+
+                time.sleep(random.uniform(0, 0.5))
+
+
+            # 上櫃資料
+            if (mode == "all") or (mode == "opt"):
+                ## 上櫃日期由西元轉換為民國
+                year = dates[i].year - 1911 # 民國
+                month = dates[i].month
+                month = ("0" + str(month)) if len(str(month)) == 1 else month
+                day = dates[i].day
+                date = f"{year}/{month}/{day}"
+
+
+                r = requests.get(f"http://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php?l=zh-tw&se=AL&t=D&d={date}")
+
+                data = json.loads(r.text)
+                df2_0 = pd.DataFrame(data["aaData"])
+                df2_0.insert(0, "Date", dates[i])
+                
+                df2_1 = pd.concat([df2_1, df2_0], ignore_index = True)
+                
+                time.sleep(random.uniform(0, 0.5))
+
+
+        # 資料清洗
+        print(f"{'-'*30} Clean data. {'-'*30}")
+        ## 上市
+        if (mode == "all") or (mode == "listed"):
+            df1_1 = df1_1[['Date', '證券代號', '證券名稱', '外陸資買賣超股數(不含外資自營商)', '外資自營商買賣超股數', '投信買賣超股數', '自營商買賣超股數(自行買賣)', '自營商買賣超股數(避險)', '自營商買賣超股數', '三大法人買賣超股數']]
+            df1_1.insert(5, "外資買賣超股數", (df1_1["外陸資買賣超股數(不含外資自營商)"] + df1_1["外資自營商買賣超股數"]))
+            df1_1.columns = features
+
+            df1_1['證券代號'] = df1_1['證券代號'].apply(lambda X: X.replace('=', '').replace('"', ''))
+
+        ## 上櫃
+        if (mode == "all") or (mode == "opt"):
+            df2_1 = df2_1.iloc[:, [0, 1, 2, 5, 8, 11, 14, 17, 20, 23, 24]]
+            df2_1.columns = features
+
+            df2_1.iloc[:, 3:] = df2_1.iloc[:, 3:].applymap(lambda X: int(X.replace(",", "")))
+
+        df = pd.concat([df1_1, df2_1], ignore_index = True)
+        df = df.sort_values("Date")
+        df = df.reset_index(drop = True)
+
+        return df
+
 
 
     def get_spread_of_shareholding(self, start = "2019-01-01", end = "2022-12-31", mode = "all", query = None):
