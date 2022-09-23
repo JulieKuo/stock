@@ -343,7 +343,19 @@ class Scrapy():
     
 
 
-    def get_chip_data(self, start = "2022-09-17", end = "2022-09-22", mode = "all"):
+    def get_chip_data(self, start = "2021-01-01", end = "2022-01-31", mode = "all"):
+        # data source: yahoo finance
+        '''
+        start (default = "2021-01-01"):
+            YYYY-MM-DD
+        end (default = "2022-01-31"):
+            YYYY-MM-DD
+        mode (default = "all"):
+            all:    上市 & 上櫃
+            listed: 上市
+            opt:    上櫃
+        '''
+
         # 取得時間區間內的所有工作日
         start = datetime.datetime.strptime(start, "%Y-%m-%d")
         end = datetime.datetime.strptime(end, "%Y-%m-%d")
@@ -376,7 +388,7 @@ class Scrapy():
 
                 df1_1 = pd.concat([df1_1, df1_0], ignore_index = True)
 
-                time.sleep(random.uniform(0, 0.5))
+                time.sleep(random.uniform(0.5, 1))
 
 
             # 上櫃資料
@@ -397,7 +409,7 @@ class Scrapy():
                 
                 df2_1 = pd.concat([df2_1, df2_0], ignore_index = True)
                 
-                time.sleep(random.uniform(0, 0.5))
+                time.sleep(random.uniform(0.5, 1))
 
 
         # 資料清洗

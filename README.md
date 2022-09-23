@@ -5,6 +5,7 @@ https://hackmd.io/8_IH5lGwQz6gQCACmTiKOg
 * Get stock ticker  `獲得股票代號及產業`
 * Get stock price `獲得歷史股價`
 * Get financial statement `獲得財務報表`
+* Get chip data `獲得三大法人`
 * Get spread of shareholding `獲得股權分散表`
 
 
@@ -128,6 +129,32 @@ df
     end_year (default = None): **需與start_year一起使用**
         YYY (民國)
 
+
+
+## Get chip data.
+
+
+```python=
+import stock_data as stock
+
+scrapy = stock.Scrapy()
+df = scrapy.get_chip_data(
+    start = "2022-09-01",
+    end = "2022-09-22",
+    mode = "all"
+)
+df
+```
+
+### Parameters
+    start (default = "2021-01-01"):
+        YYYY-MM-DD
+    end (default = "2022-01-31"):
+        YYYY-MM-DD
+    mode (default = "all"):
+        all:    上市 & 上櫃
+        listed: 上市
+        opt:    上櫃
 
 
 ## Get spread of shareholding. (nearly three years)
