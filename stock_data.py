@@ -314,7 +314,7 @@ class Scrapy():
                     continue
                 
                 r.encoding = 'utf8'
-                dfs = pd.read_html(r.text, header=None)
+                dfs = pd.read_html(r.text)
 
                 if (clean == 1):
                     if (type_ == 1):
