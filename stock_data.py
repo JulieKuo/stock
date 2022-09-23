@@ -388,7 +388,7 @@ class Scrapy():
 
                 df1_1 = pd.concat([df1_1, df1_0], ignore_index = True)
 
-                time.sleep(random.uniform(0.5, 1))
+                time.sleep(random.uniform(1, 3))
 
 
             # 上櫃資料
@@ -409,7 +409,7 @@ class Scrapy():
                 
                 df2_1 = pd.concat([df2_1, df2_0], ignore_index = True)
                 
-                time.sleep(random.uniform(0.5, 1))
+                time.sleep(random.uniform(1, 3))
 
 
         # 資料清洗
@@ -432,6 +432,10 @@ class Scrapy():
         df = pd.concat([df1_1, df2_1], ignore_index = True)
         df = df.sort_values("Date")
         df = df.reset_index(drop = True)
+        
+        if no_data != str():
+            print(no_data)
+
 
         return df
 
