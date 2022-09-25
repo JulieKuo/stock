@@ -12,7 +12,7 @@ class Scrapy():
     def __init__(self):
         self.urls = {
                 "listed": "http://isin.twse.com.tw/isin/C_public.jsp?strMode=2", # 上市
-                "opt": "http://isin.twse.com.tw/isin/C_public.jsp?strMode=4", # 上櫃
+                "otc": "http://isin.twse.com.tw/isin/C_public.jsp?strMode=4", # 上櫃
             }
 
 
@@ -57,9 +57,9 @@ class Scrapy():
 
 
     def check_mode(self, mode = "all"):
-        mode_type = ["all", "listed", "opt", "other"]
+        mode_type = ["all", "listed", "otc", "other"]
         if mode not in mode_type:
-            print("* Error * - mode can only be all/listed/opt/other")
+            print("* Error * - mode can only be all/listed/otc/other")
             return True
 
         return False
@@ -71,7 +71,7 @@ class Scrapy():
         mode (default = "all"):
             all:    上市 & 上櫃
             listed: 上市
-            opt:    上櫃
+            otc:    上櫃
         '''
 
         # 檢查輸入是否有誤
@@ -83,13 +83,13 @@ class Scrapy():
         # 取得指定市場的ticker
         if mode == "all":
             df_list = self.get_ticker(url = self.urls["listed"])
-            df_opt = self.get_ticker(url = self.urls["opt"])
-            self.tickers = pd.concat([df_list, df_opt], ignore_index = True)
+            df_otc = self.get_ticker(url = self.urls["otc"])
+            tickers = pd.concat([df_list, df_otc], ignore_index = True)
         else:
-            self.tickers = self.get_ticker(url = self.urls[mode])
+            tickers = self.get_ticker(url = self.urls[mode])
         
 
-        return self.tickers
+        return tickers
 
 
     
@@ -103,10 +103,10 @@ class Scrapy():
         mode (default = "all"):
             all:    上市 & 上櫃
             listed: 上市
-            opt:    上櫃
+            otc:    上櫃
             other:  自行輸入query
         query (default = None):
-            mode為all、listed、opt: None
+            mode為all、listed、otc: None
             mode為other: 
                         一檔股票的query: 上市: "2330.TW" 、 上櫃: "6510.TWO" 
                         多檔股票的query: "2330.TW 6510.TWO"
@@ -139,8 +139,8 @@ class Scrapy():
 
         # 獲取股價資料
         print(f"{'-'*30} Get price. {'-'*30}")
-        self.query = query
-        df = yf.download(self.query, start = start, end = end, group_by = 'ticker')
+        query = query
+        df = yf.download(query, start = start, end = end, group_by = 'ticker')
 
 
         # 資料整理及清洗
@@ -162,36 +162,50 @@ class Scrapy():
             df1 = df1.sort_values("Date")
             df1 = df1.reset_index()
             price = pd.concat([price, df1], ignore_index = True)
-        self.price = price[["Symbol", "Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]].round(2)
+        price = price[["Symbol", "Date", "Open", "High", "Low", "Close", "Adj Close", "Volume"]].round(2)
         
 
-        return self.price
+        return price
     
 
 
-    def clean_income_statement(self, dfs, year = 111, season = 1):
-        features = ['公司代號', '公司名稱', '收入', '營業毛利', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+    def clean_income_statement(self, dfs, year = 111, season = 1, market = "sii"):
+        features = ['公司代號', '公司名稱', '營業收入', '營業毛利', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+        feats = {
+            "公司代號": ["公司代號"],
+            "公司名稱": ["公司名稱"],
+            "營業收入": ["營業收入", "收入", "收益", "淨收益"],
+            "營業毛利": ["營業毛利", "營業毛利（毛損）淨額", "營業毛利（毛損）"],
+            "營業利益": ["營業利益", "營業利益（損失）"],
+            "稅前淨利": ["稅前淨利", "繼續營業單位稅前淨利（淨損）", "稅前淨利（淨損）", "繼續營業單位稅前損益", "繼續營業單位稅前純益（純損）"],
+            "本期淨利": ["本期淨利", "本期稅後淨利（淨損）", "本期淨利（淨損）"],
+            "本期綜合損益": ["本期綜合損益", "本期綜合損益總額（稅後）", "本期綜合損益總額"],
+            "每股盈餘(元)": ["每股盈餘(元)", "基本每股盈餘（元）"],
+        }
 
-        dfs[1]["收入"] = dfs[1].eval("利息淨收益 + 利息以外淨損益")
-        dfs[1] = dfs[1][['公司代號', '公司名稱', '收入',  '繼續營業單位稅前淨利（淨損）', '本期稅後淨利（淨損）', '本期綜合損益總額（稅後）', '基本每股盈餘（元）']]
-        dfs[1].columns = ['公司代號', '公司名稱', '收入', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+        for i in range(1, len(dfs)):
+            if (market == "sii") & (i == 1):
+                dfs[i]["營業收入"] = dfs[i].eval("利息淨收益 + 利息以外淨損益")
+            elif (market == "sii") & (i == 5):
+                dfs[i]["營業毛利"] = dfs[i].eval("營業收入 - 營業成本")
 
-        dfs[2] = dfs[2][['公司代號', '公司名稱', '收益', '營業利益', '稅前淨利（淨損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
-        dfs[2].columns = ['公司代號', '公司名稱', '收入', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
+            cols1 = []
+            cols2 = []
+            for feat in features:
+                col = list(set(feats[feat]) & set(dfs[i].columns))
+                if col != []:
+                    cols1.append(col[0]) # 原始的欄位名稱
+                    cols2.append(feat) # 統一的欄位名稱
 
-        dfs[3] = dfs[3][['公司代號', '公司名稱', '營業收入', '營業毛利（毛損）淨額', '營業利益（損失）', '稅前淨利（淨損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
-        dfs[3].columns = features
+            dfs[i] = dfs[i][cols1] # 抓出需要的欄位
+            dfs[i].columns = cols2 # 修改欄位名稱
 
-        dfs[4] = dfs[4][['公司代號', '公司名稱', '淨收益', '繼續營業單位稅前損益', '本期稅後淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
-        dfs[4].columns = ['公司代號', '公司名稱', '收入', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
-
-        dfs[5] = dfs[5][['公司代號', '公司名稱', '營業收入', '營業利益（損失）', '繼續營業單位稅前純益（純損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
-        dfs[5].columns = ['公司代號', '公司名稱', '收入', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
-
-        dfs[6] = dfs[6][['公司代號', '公司名稱', '收入', '繼續營業單位稅前淨利（淨損）', '本期淨利（淨損）', '本期綜合損益總額', '基本每股盈餘（元）']]
-        dfs[6].columns = ['公司代號', '公司名稱', '收入', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
-
-        df = pd.concat(dfs[1:])
+            if dfs[i].shape[1] == 0:
+                print(f"{market} {i} table error in Q{season} {year}.")
+            
+        #     print(dfs[i].shape[1])
+        # print()
+        df = pd.concat(dfs[1:], ignore_index = "True")
         df = df[features]
 
         df.insert(0, "year", year)
@@ -201,30 +215,44 @@ class Scrapy():
     
 
 
-    def clean_balance_sheet(self, dfs, year = 111, season = 1):
-        features1 = ['公司代號', '公司名稱', '流動資產', '非流動資產', '資產總額', '流動負債', '非流動負債', '負債總額', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總額', '每股淨值']
-        features2 = ['公司代號', '公司名稱', '資產總額', '負債總額', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總額', '每股淨值']
+    def clean_balance_sheet(self, dfs, year = 111, season = 1, market = "sii"):
+        features = ['公司代號', '公司名稱', '流動資產', '非流動資產', '資產總額', '流動負債', '非流動負債', '負債總額', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總額', '每股淨值']
+        feats = {
+            "公司代號": ["公司代號"],
+            "公司名稱": ["公司名稱"],
+            "流動資產": ["流動資產"],
+            "非流動資產": ["非流動資產"],
+            "資產總額": ["資產總額", "資產總計", "資產合計"],
+            "流動負債": ["流動負債"],
+            "非流動負債": ["非流動負債"],
+            "負債總額": ["負債總額", "負債總計", "負債合計"],
+            "股本": ["股本"],
+            "資本公積": ["資本公積"],
+            "保留盈餘": ["保留盈餘", "保留盈餘（或累積虧損）"],
+            "庫藏股票": ["庫藏股票", "庫藏股"],
+            "權益總額": ["權益總額", "權益總計", "權益合計"],
+            "每股淨值": ["每股淨值", "每股參考淨值"],
+        }
 
-        dfs[1] = dfs[1][['公司代號', '公司名稱', '資產總額', '負債總額', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總額', '每股參考淨值']]
-        dfs[1].columns = features2
+        for i in range(1, len(dfs)):
+            cols1 = []
+            cols2 = []
+            for feat in features:
+                col = list(set(feats[feat]) & set(dfs[i].columns))
+                if col != []:
+                    cols1.append(col[0]) # 原始的欄位名稱
+                    cols2.append(feat) # 統一的欄位名稱
 
-        dfs[2] = dfs[2][['公司代號', '公司名稱', '流動資產', '非流動資產', '資產總計', '流動負債', '非流動負債', '負債總計', '股本', '資本公積', '保留盈餘（或累積虧損）', '庫藏股票', '權益總計', '每股參考淨值']]
-        dfs[2].columns = features1
+            dfs[i] = dfs[i][cols1] # 抓出需要的欄位
+            dfs[i].columns = cols2 # 修改欄位名稱
 
-        dfs[3] = dfs[3][['公司代號', '公司名稱', '流動資產', '非流動資產', '資產總計', '流動負債', '非流動負債', '負債總計', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總計', '每股參考淨值']]
-        dfs[3].columns = features1
+            if dfs[i].shape[1] == 0:
+                print(f"{market} {i} table error in Q{season} {year}.")
 
-        dfs[4] = dfs[4][['公司代號', '公司名稱', '資產總額', '負債總額', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總額', '每股參考淨值']]
-        dfs[4].columns = features2
-
-        dfs[5] = dfs[5][['公司代號', '公司名稱', '資產總計', '負債總計', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總計', '每股參考淨值']]
-        dfs[5].columns = features2
-
-        dfs[6] = dfs[6][['公司代號', '公司名稱', '流動資產', '非流動資產', '資產總計', '流動負債', '非流動負債', '負債總計', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總額', '每股參考淨值']]
-        dfs[6].columns = features1
-
-        df = pd.concat(dfs[1:])
-        df = df[features1]
+        #     print(dfs[i].shape[1])
+        # print()
+        df = pd.concat(dfs[1:], ignore_index = "True")
+        df = df[features]
 
         df.insert(0, "year", year)
         df.insert(1, "season", season)
@@ -237,14 +265,21 @@ class Scrapy():
         df = dfs[0]
         df.columns = df.iloc[0]
         df = df.drop(0)
+
+        drop_index = df[df["營業收入(百萬元)"] == "營業收入(百萬元)"].index
+        df = df.drop(drop_index)
+        df = df.reset_index(drop = True)
+
         df.insert(0, "year", year)
         df.insert(1, "season", season)
+
+        # time.sleep(random.uniform(1, 1.5))
 
         return df    
 
 
 
-    def get_financial_statement(self, year = 111, season = 2, type_ = 1, clean = 1, start_year = None, end_year = None):
+    def get_financial_statement(self, year = 111, season = 2, type_ = 1, clean = 1, mode = "all", start_year = None, end_year = None):
         # data source:
             # 損益表:     https://mops.twse.com.tw/mops/web/t163sb04
             # 資產負債表: https://mops.twse.com.tw/mops/web/t163sb05
@@ -261,6 +296,10 @@ class Scrapy():
             clean (default = 1):
                 1: 清洗
                 0: 原始資料
+            mode (default = "all"):
+                all:    上市 & 上櫃
+                listed: 上市
+                otc:    上櫃
             start_year (default = None): **需與end_year一起使用**
                 YYY (民國)
             end_year (default = None): **需與start_year一起使用**
@@ -272,6 +311,12 @@ class Scrapy():
             1: "Income Statement",
             2: "Balance Sheet",
             3: "Profit Analysis",
+        }
+
+        markets = {
+            "all": ["sii", "otc"],
+            "listed": ["sii"],
+            "otc": ["otc"],
         }
 
 
@@ -296,153 +341,225 @@ class Scrapy():
 
 
         # 取得報表資料
-        print(f"{'-'*30} Get {state[type_]}. {'-'*30}")
         no_data = str()
         df1 = pd.DataFrame()
-        for year in tqdm(years):
-            for season in seasons:
-                r = requests.post(url, {
-                    'encodeURIComponent':1,
-                    'step':1,
-                    'firstin':1,
-                    'off':1,
-                    'TYPEK':'sii',
-                    'year':str(year),
-                    'season':str(season),
-                })
-                
-                if "查詢無資料" in r.text:
-                    no_data += f"No data in year = {year}, season = {season}.\n"
-                    continue
-                
-                r.encoding = 'utf8'
-                dfs = pd.read_html(r.text)
+        for market in markets[mode]:
+            print(f"{'-'*30} Get {state[type_]} of {market}. {'-'*30}")
+            for year in tqdm(years):
+                for season in seasons:
+                    r = requests.post(url, {
+                        'encodeURIComponent': 1,
+                        'step': 1,
+                        'firstin': 1,
+                        'off': 1,
+                        'TYPEK': market,
+                        'year': str(year),
+                        'season': str(season),
+                    })
+                    
+                    if "查詢無資料" in r.text:
+                        no_data += f"{market} has no data in Q{season} {year}.\n"
+                        continue
+                    
+                    r.encoding = 'utf8'
+                    dfs = pd.read_html(r.text)
 
-                if (clean == 1):
-                    if (type_ == 1):
-                        df0 = self.clean_income_statement(dfs, year, season)
-                    elif (type_ == 2):
-                        df0 = self.clean_balance_sheet(dfs, year, season)
-                    elif (type_ == 3):
-                        df0 = self.clean_profit_analysis(dfs, year, season)
-                else:
-                    df0 = pd.concat(dfs)
-                    df0.insert(0, "year", year)
-                    df0.insert(1, "season", season)
-                
-                df1 = pd.concat([df1, df0], ignore_index = True)
-                self.statement = df1
-                
-                time.sleep(random.uniform(0, 0.5))
+                    if (clean == 1):
+                        if (type_ == 1):
+                            df0 = self.clean_income_statement(dfs, year, season, market)
+                        elif (type_ == 2):
+                            df0 = self.clean_balance_sheet(dfs, year, season, market)
+                        elif (type_ == 3):
+                            df0 = self.clean_profit_analysis(dfs, year, season)
+                    else:
+                        df0 = pd.concat(dfs)
+                        df0.insert(0, "year", year)
+                        df0.insert(1, "season", season)
+                    
+                    df1 = pd.concat([df1, df0], ignore_index = True)
+                    
+                    time.sleep(random.uniform(6, 7))
         
+
+        df1 = df1.replace("--", None)
+        df1["公司代號"] = df1["公司代號"].astype(str)
+        df1.iloc[:, 4:] = df1.iloc[:, 4:].astype(float)
+
+
         if no_data != str():
             print(no_data)
 
 
-        return self.statement
+        return df1
     
 
 
-    def get_chip_data(self, start = "2021-01-01", end = "2022-01-31", mode = "all"):
-        # data source: yahoo finance
+    def get_chip_data(self, start = "2021-01-01", end = "2022-01-31", mode = "all", query = None):
+        # data source: 
+        #   鉅亨網 - https://invest.cnyes.com/twstock/tws/2330/holders/institution
         '''
-        start (default = "2021-01-01"):
+        start (from 2015-09-14):
             YYYY-MM-DD
-        end (default = "2022-01-31"):
+        end:
             YYYY-MM-DD
         mode (default = "all"):
             all:    上市 & 上櫃
             listed: 上市
-            opt:    上櫃
+            otc:    上櫃
+            other:  自行輸入query
+        query (default = None):
+            mode為all、listed、otc: None
+            mode為other: 
+                        一檔股票的query: 上市: "2330" 、 上櫃: "6510" 
+                        多檔股票的query: "2330 6510"
         '''
 
-        # 取得時間區間內的所有工作日
+
         start = datetime.datetime.strptime(start, "%Y-%m-%d")
         end = datetime.datetime.strptime(end, "%Y-%m-%d")
 
-        dates = pd.date_range(start, end)
-        work = [is_workday(date) for date in dates]
-        dates = dates[work]
-        dates_str = [datetime.datetime.strftime(date, "%Y%m%d") for date in dates]
+        start += datetime.timedelta(1)
+        end += datetime.timedelta(1)
+
+        start = round(start.timestamp())
+        end = round(end.timestamp())
 
 
-        # 獲取三大法人資訊
-        df1_1 = pd.DataFrame()
-        df2_1 = pd.DataFrame()
-        no_data = str()
-        features = ['Date', '證券代號', '證券名稱', '外資(不含外資自營)', '外資自營', '外資', '投信', '自營(自行買賣)', '自營(避險)', '自營', '三大法人']
+        # 檢查輸入是否有誤
+        mode_flag = self.check_mode(mode)
+        if mode_flag:
+            print("error")
+            # return
 
-        print(f"{'-'*30} Get chips data. {'-'*30}")
-        for i in tqdm(range(len(dates))):
-            # 上市資料
-            if (mode == "all") or (mode == "listed"):
-                r = requests.get(f"http://www.tse.com.tw/fund/T86?response=csv&date={dates_str[i]}&selectType=ALLBUT0999")
-
-                if r.text == "\r\n":
-                    no_data += f"{dates[i]} doesn't have data.\n"
-                    continue
-
-                df1_0 = pd.read_csv(StringIO(r.text), header = 1, thousands = ",")
-                df1_0 = df1_0.dropna(how='all', axis=1).dropna(how='any') # 刪除
-                df1_0.insert(0, "Date", dates[i])
-
-                df1_1 = pd.concat([df1_1, df1_0], ignore_index = True)
-
-                time.sleep(random.uniform(1, 3))
+        if mode != "other":
+            print(f"{'-'*30} Get ticker. {'-'*30}")
+            tickers = self.get_TW_tickers(mode)
+            tickers = tickers["symbol"].tolist()
+        else:
+            tickers = query.split(" ")
 
 
-            # 上櫃資料
-            if (mode == "all") or (mode == "opt"):
-                ## 上櫃日期由西元轉換為民國
-                year = dates[i].year - 1911 # 民國
-                month = dates[i].month
-                month = ("0" + str(month)) if len(str(month)) == 1 else month
-                day = dates[i].day
-                date = f"{year}/{month}/{day}"
+        print(f"{'-'*30} Get chip data. {'-'*30}")
+        df1 = pd.DataFrame()
+        for symbol in tqdm(tickers):
+            url = f"https://marketinfo.api.cnyes.com/mi/api/v1/investors/buysell/TWS%3A{symbol}%3ASTOCK?from={end}&to={start}"
+            r = requests.get(url)
+            data = json.loads(r.text)
+            df = pd.DataFrame(data["data"])
 
+            df1 = pd.concat([df1, df], ignore_index = True)
+            # time.sleep(random.uniform(0, 0.5))
 
-                r = requests.get(f"http://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php?l=zh-tw&se=AL&t=D&d={date}")
-
-                data = json.loads(r.text)
-                df2_0 = pd.DataFrame(data["aaData"])
-                df2_0.insert(0, "Date", dates[i])
-                
-                df2_1 = pd.concat([df2_1, df2_0], ignore_index = True)
-                
-                time.sleep(random.uniform(1, 3))
-
-
-        # 資料清洗
-        print(f"{'-'*30} Clean data. {'-'*30}")
-        ## 上市
-        if (mode == "all") or (mode == "listed"):
-            df1_1 = df1_1[['Date', '證券代號', '證券名稱', '外陸資買賣超股數(不含外資自營商)', '外資自營商買賣超股數', '投信買賣超股數', '自營商買賣超股數(自行買賣)', '自營商買賣超股數(避險)', '自營商買賣超股數', '三大法人買賣超股數']]
-            df1_1.insert(5, "外資買賣超股數", (df1_1["外陸資買賣超股數(不含外資自營商)"] + df1_1["外資自營商買賣超股數"]))
-            df1_1.columns = features
-
-            df1_1['證券代號'] = df1_1['證券代號'].apply(lambda X: X.replace('=', '').replace('"', ''))
-
-        ## 上櫃
-        if (mode == "all") or (mode == "opt"):
-            df2_1 = df2_1.iloc[:, [0, 1, 2, 5, 8, 11, 14, 17, 20, 23, 24]]
-            df2_1.columns = features
-
-            df2_1.iloc[:, 3:] = df2_1.iloc[:, 3:].applymap(lambda X: int(X.replace(",", "")))
-
-        df = pd.concat([df1_1, df2_1], ignore_index = True)
-        df = df.sort_values("Date")
-        df = df.reset_index(drop = True)
+        df1.columns = [i.replace("Volume", "") if "Volume" in i else i for i in df1.columns]
         
-        if no_data != str():
-            print(no_data)
+        
+        return df1
 
 
-        return df
+
+    # def get_chip_data(self, start = "2021-01-01", end = "2022-01-31", mode = "all"):
+    #     # data source: 
+    #     #   證交所:   https://www.twse.com.tw/zh/page/trading/fund/T86.html
+    #     #   櫃買中心: https://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge.php?l=zh-tw
+    #     '''
+    #     start (default = "2021-01-01"):
+    #         YYYY-MM-DD
+    #     end (default = "2022-01-31"):
+    #         YYYY-MM-DD
+    #     mode (default = "all"):
+    #         all:    上市 & 上櫃
+    #         listed: 上市
+    #         otc:    上櫃
+    #     '''
+
+    #     # 取得時間區間內的所有工作日
+    #     start = datetime.datetime.strptime(start, "%Y-%m-%d")
+    #     end = datetime.datetime.strptime(end, "%Y-%m-%d")
+
+    #     dates = pd.date_range(start, end)
+    #     work = [is_workday(date) for date in dates]
+    #     dates = dates[work]
+    #     dates_str = [datetime.datetime.strftime(date, "%Y%m%d") for date in dates]
+
+
+    #     # 獲取三大法人資訊
+    #     df1_1 = pd.DataFrame()
+    #     df2_1 = pd.DataFrame()
+    #     no_data = str()
+    #     features = ['Date', '證券代號', '證券名稱', '外資(不含外資自營)', '外資自營', '外資', '投信', '自營(自行買賣)', '自營(避險)', '自營', '三大法人']
+
+    #     print(f"{'-'*30} Get chips data. {'-'*30}")
+    #     for i in tqdm(range(len(dates))):
+    #         # 上市資料
+    #         if (mode == "all") or (mode == "listed"):
+    #             r = requests.get(f"http://www.tse.com.tw/fund/T86?response=csv&date={dates_str[i]}&selectType=ALLBUT0999")
+
+    #             if r.text == "\r\n":
+    #                 no_data += f"{dates[i].date()} doesn't have data.\n"
+    #                 continue
+
+    #             df1_0 = pd.read_csv(StringIO(r.text), header = 1, thousands = ",")
+    #             df1_0 = df1_0.dropna(how='all', axis=1).dropna(how='any') # 刪除
+    #             df1_0.insert(0, "Date", dates[i])
+
+    #             df1_1 = pd.concat([df1_1, df1_0], ignore_index = True)
+
+    #             time.sleep(random.uniform(1, 3))
+
+
+    #         # 上櫃資料
+    #         if (mode == "all") or (mode == "otc"):
+    #             ## 上櫃日期由西元轉換為民國
+    #             year = dates[i].year - 1911 # 民國
+    #             month = dates[i].month
+    #             month = ("0" + str(month)) if len(str(month)) == 1 else month
+    #             day = dates[i].day
+    #             date = f"{year}/{month}/{day}"
+
+
+    #             r = requests.get(f"http://www.tpex.org.tw/web/stock/3insti/daily_trade/3itrade_hedge_result.php?l=zh-tw&se=AL&t=D&d={date}")
+
+    #             data = json.loads(r.text)
+    #             df2_0 = pd.DataFrame(data["aaData"])
+    #             df2_0.insert(0, "Date", dates[i])
+                
+    #             df2_1 = pd.concat([df2_1, df2_0], ignore_index = True)
+                
+    #             time.sleep(random.uniform(1, 3))
+
+
+    #     # 資料清洗
+    #     print(f"{'-'*30} Clean data. {'-'*30}")
+    #     ## 上市
+    #     if (mode == "all") or (mode == "listed"):
+    #         df1_1 = df1_1[['Date', '證券代號', '證券名稱', '外陸資買賣超股數(不含外資自營商)', '外資自營商買賣超股數', '投信買賣超股數', '自營商買賣超股數(自行買賣)', '自營商買賣超股數(避險)', '自營商買賣超股數', '三大法人買賣超股數']]
+    #         df1_1.insert(5, "外資買賣超股數", (df1_1["外陸資買賣超股數(不含外資自營商)"] + df1_1["外資自營商買賣超股數"]))
+    #         df1_1.columns = features
+
+    #         df1_1['證券代號'] = df1_1['證券代號'].apply(lambda X: X.replace('=', '').replace('"', ''))
+
+    #     ## 上櫃
+    #     if (mode == "all") or (mode == "otc"):
+    #         df2_1 = df2_1.iloc[:, [0, 1, 2, 5, 8, 11, 14, 17, 20, 23, 24]]
+    #         df2_1.columns = features
+
+    #         df2_1.iloc[:, 3:] = df2_1.iloc[:, 3:].applymap(lambda X: int(X.replace(",", "")))
+
+    #     df = pd.concat([df1_1, df2_1], ignore_index = True)
+    #     df = df.sort_values("Date")
+    #     df = df.reset_index(drop = True)
+        
+    #     if no_data != str():
+    #         print(no_data)
+
+
+    #     return df
 
 
 
     def get_spread_of_shareholding(self, start = "2019-01-01", end = "2022-12-31", mode = "all", query = None):
-        # data source: 神秘金字塔 - https://norway.twsthr.info/StockHolders.aspx
+        # data source: 
+        #   神秘金字塔: https://norway.twsthr.info/StockHolders.aspx
         '''
         start:
             YYYY-MM-DD
@@ -451,18 +568,18 @@ class Scrapy():
         mode (default = "all"):
             all:    上市 & 上櫃
             listed: 上市
-            opt:    上櫃
+            otc:    上櫃
             other:  自行輸入query
         query (default = None):
-            mode為all、listed、opt: None
+            mode為all、listed、otc: None
             mode為other: 
                         一檔股票的query: 上市: "2330" 、 上櫃: "6510" 
                         多檔股票的query: "2330 6510"
         '''
 
 
-        start = datetime.datetime(int(start[:4]), int(start[5:7]), int(start[8:]))
-        end = datetime.datetime(int(end[:4]), int(end[5:7]), int(end[8:]))
+        start = datetime.datetime.strptime(start, "%Y-%m-%d")
+        end = datetime.datetime.strptime(end, "%Y-%m-%d")
 
 
         # 檢查輸入是否有誤
@@ -477,11 +594,11 @@ class Scrapy():
             tickers = tickers["symbol"].tolist()
         else:
             tickers = query.split(" ")
-        
+
 
         print(f"{'-'*30} Get spread of shareholding. {'-'*30}")
         no_data = str()
-        spread = pd.DataFrame()
+        df1 = pd.DataFrame()
         for symbol in tqdm(tickers):
             # 取得網頁資料
             res = requests.get(f"https://norway.twsthr.info/StockHolders.aspx?stock={symbol}")
@@ -497,34 +614,35 @@ class Scrapy():
             
             ## 有證券代號，無表格
             try:
-                samples = soup.find("div", {"id": "D1"}).find("table").find("table").find_all("tr")
+                samples = soup.find("div", {"id": "D1"}).find("table").find("table")
             except:
                 no_data += f"No data found for {symbol}.\n"
                 continue
 
             # 解析提取表格數據
-            data = []
-            for i in range(len(samples)):
-                elements = samples[i].find_all("td")[2:-1]
-                data.append([ele.text.replace("\xa0", "").replace(",", "") for ele in elements])
-            df = pd.DataFrame(data)
+            dfs = pd.read_html(str(samples), header = 0)
+            df = dfs[0]
+            df = df.dropna(how = "all", axis=1).dropna()
+            df.insert(loc = 0, column = "symbol", value = symbol)
+            df = df.reset_index(drop = True)
 
-            # 資料清洗
-            df.columns = df.iloc[0]
-            df = df.dropna().drop(0).reset_index(drop = True)
-            df = df.drop("收盤價", axis = 1)
-            df["資料日期"] = pd.to_datetime(df["資料日期"])
-            df.iloc[:, 1:] = df.iloc[:, 1:].astype(float)
-            df.insert(loc = 0, column = "symbol", value = symbol) 
+            df1 = pd.concat([df1, df], ignore_index = True)
 
-            spread = pd.concat([spread, df], ignore_index = True)
+            # time.sleep(random.uniform(0, 0.5))
 
-            time.sleep(random.uniform(0, 0.5))
 
-        if len(spread) >= 1:
-            self.spread = spread.query("(資料日期 >= @start) & (資料日期 <= @end)").reset_index(drop = True)
-        
+        # 資料清洗
+        print(f"{'-'*30} Clean data. {'-'*30}")
+        df1 = df1.drop("收盤價", axis = 1)
+        df1["資料日期"] = pd.to_datetime(df1["資料日期"], format='%Y%m%d')
+        df1 = df1.sort_values(["資料日期", "symbol"], ascending = True)
+        df1.iloc[:, 2:] = df1.iloc[:, 2:].astype(float)
+
+        if len(df1) >= 1:
+            df1 = df1.query("(資料日期 >= @start) & (資料日期 <= @end)").reset_index(drop = True)
+
         if no_data != str():
             print(no_data)
 
-        return self.spread
+
+        return df1
