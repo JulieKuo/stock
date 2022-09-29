@@ -80,7 +80,7 @@ df
 
 
 
-## Get financial statement. (102~now)
+## Get financial statement. (102~now，累計報表)
 
 
 **一次獲得一季的報表**
