@@ -1,6 +1,6 @@
 https://hackmd.io/8_IH5lGwQz6gQCACmTiKOg
 
-# Stock API
+# Stock
 
 * Get stock ticker  `獲得股票代號及產業`
 * Get stock price `獲得歷史股價`
