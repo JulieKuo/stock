@@ -172,7 +172,7 @@ class Scrapy():
     def clean_income_statement(self, dfs, year = 111, season = 1, market = "sii"):
         features = ['公司代號', '公司名稱', '營業收入', '營業毛利', '營業利益', '稅前淨利', '本期淨利', '本期綜合損益', '每股盈餘(元)']
         feats = {
-            "公司代號": ["公司代號"],
+            "公司代號": ["公司代號", "公司 代號"],
             "公司名稱": ["公司名稱"],
             "營業收入": ["營業收入", "收入", "收益", "淨收益"],
             "營業毛利": ["營業毛利", "營業毛利（毛損）淨額", "營業毛利（毛損）"],
@@ -218,7 +218,7 @@ class Scrapy():
     def clean_balance_sheet(self, dfs, year = 111, season = 1, market = "sii"):
         features = ['公司代號', '公司名稱', '流動資產', '非流動資產', '資產總額', '流動負債', '非流動負債', '負債總額', '股本', '資本公積', '保留盈餘', '庫藏股票', '權益總額', '每股淨值']
         feats = {
-            "公司代號": ["公司代號"],
+            "公司代號": ["公司代號", "公司 代號"],
             "公司名稱": ["公司名稱"],
             "流動資產": ["流動資產"],
             "非流動資產": ["非流動資產"],
@@ -263,10 +263,8 @@ class Scrapy():
 
     def clean_profit_analysis(self, dfs, year = 111, season = 1):
         df = dfs[0]
-        df.columns = df.iloc[0]
-        df = df.drop(0)
 
-        drop_index = df[df["營業收入(百萬元)"] == "營業收入(百萬元)"].index
+        drop_index = df[df["營業收入 (百萬元)"] == "營業收入 (百萬元)"].index
         df = df.drop(drop_index)
         df = df.reset_index(drop = True)
 
@@ -362,7 +360,10 @@ class Scrapy():
                         continue
                     
                     r.encoding = 'utf8'
-                    dfs = pd.read_html(r.text)
+                    if (type_ == 3):
+                        dfs = pd.read_html(r.text, header = [0])
+                    else:                        
+                        dfs = pd.read_html(r.text)
 
                     if (clean == 1):
                         if (type_ == 1):
@@ -373,6 +374,7 @@ class Scrapy():
                             df0 = self.clean_profit_analysis(dfs, year, season)
                     else:
                         df0 = pd.concat(dfs)
+                        df0 = df0.rename(columns = {"公司 代號": "公司代號"})
                         df0.insert(0, "year", year)
                         df0.insert(1, "season", season)
                     
@@ -380,10 +382,10 @@ class Scrapy():
                     
                     time.sleep(random.uniform(6, 7))
         
-
-        df1 = df1.replace("--", None)
-        df1["公司代號"] = df1["公司代號"].astype(str)
-        df1.iloc[:, 4:] = df1.iloc[:, 4:].astype(float)
+        if (clean == 1):
+            df1 = df1.replace("--", None)
+            df1["公司代號"] = df1["公司代號"].astype(str)
+            df1.iloc[:, 4:] = df1.iloc[:, 4:].astype(float)
 
 
         if no_data != str():
