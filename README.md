@@ -1,19 +1,20 @@
-https://hackmd.io/8_IH5lGwQz6gQCACmTiKOg
-
 # Stock
 
-* Get stock ticker  `獲得股票代號及產業`
-* Get stock price `獲得歷史股價`
-* Get financial statement `獲得財務報表`
-* Get chip data `獲得三大法人`
-* Get spread of shareholding `獲得股權分散表`
+- [Get stock ticker](#get-stock-ticker) `獲得股票代號及產業`
+- [Get stock price](#get-stock-price) `獲得歷史股價`
+- [Get financial statement](#get-financial-statement) `獲得財務報表`
+- [Get chip data](#get-chip-data) `獲得三大法人`
+- [Get spread of shareholding](#get-spread-of-shareholding) `獲得股權分散表`
 
 
 
-## Get stock ticker.
+
+## Get stock ticker
 
 
-```python=
+### Example
+
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -29,12 +30,14 @@ df
         otc:    上櫃
 
 
-## Get stock price.
 
+## Get stock price
+
+
+### Example
 
 **指定股票代號**
-
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -48,8 +51,7 @@ df
 ```
 
 **指定市場**
-
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -80,12 +82,16 @@ df
 
 
 
-## Get financial statement. (102~now，累計報表)
+## Get financial statement
 
+`nearly 10 years`
+
+
+### Example
 
 **一次獲得一季的報表**
 
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -101,7 +107,7 @@ df
 
 **一次獲得多季的報表**
 
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -132,19 +138,21 @@ df
         all:    上市 & 上櫃
         listed: 上市
         otc:    上櫃
-    start_year (default = None): **需與end_year一起使用**
+    start_year (default = None): # 需與end_year一起使用
         YYY (民國)
-    end_year (default = None): **需與start_year一起使用**
+    end_year (default = None): # 需與start_year一起使用
         YYY (民國)
 
 
 
-## Get chip data. (nearly 7 years)
+## Get chip data
 
+
+### Example
 
 **指定股票代號**
 
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -159,7 +167,7 @@ df
 
 **指定市場**
 
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -189,12 +197,18 @@ df
                     多檔股票的query: "2330 6510"
 
 
-## Get spread of shareholding. (nearly 3 years)
 
+## Get spread of shareholding
+
+
+`nearly 3 years`
+
+
+### Example
 
 **指定股票代號**
 
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
@@ -209,7 +223,7 @@ df
 
 **指定市場**
 
-```python=
+```python
 import stock_data as stock
 
 scrapy = stock.Scrapy()
