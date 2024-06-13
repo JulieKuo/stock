@@ -11,8 +11,8 @@ import requests, time, datetime, random, json
 class Scrapy():
     def __init__(self):
         self.urls = {
-                "listed": "http://isin.twse.com.tw/isin/C_public.jsp?strMode=2", # 上市
-                "otc": "http://isin.twse.com.tw/isin/C_public.jsp?strMode=4", # 上櫃
+                "listed": "https://isin.twse.com.tw/isin/C_public.jsp?strMode=2", # 上市
+                "otc": "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4", # 上櫃
             }
 
 
@@ -30,8 +30,9 @@ class Scrapy():
 
 
         # 抓取一般股票
-        df = pd.read_html(res.text)[0]
-        df.columns = df.iloc[0]
+        # df = pd.read_html(res.text)[0]
+        # df.columns = df.iloc[0]
+        df = pd.read_html(StringIO(res.text), header=[0])[0]
         df = df.query("CFICode == 'ESVUFR'")
         df = df.reset_index(drop = True)
         df = df[["有價證券代號及名稱", "市場別", "產業別"]]
@@ -361,9 +362,11 @@ class Scrapy():
                     
                     r.encoding = 'utf8'
                     if (type_ == 3):
-                        dfs = pd.read_html(r.text, header = [0])
+                        # dfs = pd.read_html(r.text, header = [0])
+                        dfs = pd.read_html(StringIO(r.text), header=[0])
                     else:                        
-                        dfs = pd.read_html(r.text)
+                        # dfs = pd.read_html(r.text)
+                        dfs = pd.read_html(StringIO(r.text))
 
                     if (clean == 1):
                         if (type_ == 1):
